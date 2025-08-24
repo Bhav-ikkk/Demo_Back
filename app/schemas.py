@@ -27,7 +27,10 @@ class RefinedProductRequirement(BaseModel):
 
 class RefineRequest(BaseModel):
     idea: str = Field(min_length=10, max_length=5000, description="The product idea to refine")
-    priority_focus: Optional[str] = Field(description="Specific area to focus on (technical, market, user)")
+    priority_focus: Optional[str] = Field(
+        description="Specific area to focus on (technical, market, user, balanced)",
+        pattern="^(technical|market|user|balanced)$"  # Changed from regex to pattern
+    )
     
     @validator('idea')
     def validate_idea(cls, v):

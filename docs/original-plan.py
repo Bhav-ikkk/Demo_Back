@@ -82,7 +82,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from .schemas import RefinedProductRequirement
 
 # Initialize the LLM
-llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.7)
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7)
 
 # --- AGENT 1: PRODUCT MANAGER ---
 pm_prompt = PromptTemplate.from_template(

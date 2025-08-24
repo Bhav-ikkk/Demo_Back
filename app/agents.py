@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 class AIAgentOrchestrator:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-pro", 
+            model="gemini-2.0-flash", 
             temperature=0.7,
             google_api_key=settings.google_api_key
         )

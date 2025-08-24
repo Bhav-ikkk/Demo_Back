@@ -42,32 +42,39 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.clients = {}
     
     async def dispatch(self, request: Request, call_next):
-        client_ip = request.client.host if request.client else "unknown"
-        current_time = time.time()
-        
-        # Clean old entries
-        self.clients = {
-            ip: timestamps for ip, timestamps in self.clients.items()
-            if any(t > current_time - self.period for t in timestamps)
-        }
-        
-        # Check rate limit
-        if client_ip in self.clients:
-            self.clients[client_ip] = [
-                t for t in self.clients[client_ip] 
-                if t > current_time - self.period
-            ]
+        try:
+            client_ip = request.client.host if request.client else "unknown"
+            current_time = time.time()
             
-            if len(self.clients[client_ip]) >= self.calls:
-                return Response(
-                    content="Rate limit exceeded",
-                    status_code=429,
-                    headers={"Retry-After": str(self.period)}
-                )
-        else:
-            self.clients[client_ip] = []
-        
-        # Add current request
-        self.clients[client_ip].append(current_time)
-        
-        return await call_next(request)
+            # Clean old entries
+            self.clients = {
+                ip: timestamps for ip, timestamps in self.clients.items()
+                if any(t > current_time - self.period for t in timestamps)
+            }
+            
+            # Check rate limit
+            if client_ip in self.clients:
+                self.clients[client_ip] = [
+                    t for t in self.clients[client_ip] 
+                    if t > current_time - self.period
+                ]
+                
+                if len(self.clients[client_ip]) >= self.calls:
+                    return Response(
+                        content="Rate limit exceeded",
+                        status_code=429,
+                        headers={"Retry-After": str(self.period)}
+                    )
+            else:
+                self.clients[client_ip] = []
+            
+            # Add current request
+            self.clients[client_ip].append(current_time)
+            
+            return await call_next(request)
+        except Exception as e:
+            logger.error("Rate limit middleware error", error=str(e))
+            return Response(
+                content="Internal server error",
+                status_code=500
+            )

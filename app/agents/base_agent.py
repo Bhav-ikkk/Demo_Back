@@ -1,0 +1,122 @@
+import asyncio
+import time
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import PromptTemplate
+from tenacity import retry, stop_after_attempt, wait_exponential
+import structlog
+from ..config import settings
+from ..models import AgentResponseModel, AgentType
+
+logger = structlog.get_logger()
+
+class BaseAgent(ABC):
+    """Base class for all AI agents with common functionality"""
+    
+    def __init__(self, agent_type: AgentType):
+        self.agent_type = agent_type
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            temperature=0.7,
+            google_api_key=settings.google_api_key
+        )
+        self.setup_prompts()
+    
+    @abstractmethod
+    def setup_prompts(self):
+        """Setup agent-specific prompts"""
+        pass
+    
+    @abstractmethod
+    def get_expertise_areas(self) -> List[str]:
+        """Return list of expertise areas for this agent"""
+        pass
+    
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    async def analyze(self, product_idea: str, context: Dict[str, Any] = None) -> AgentResponseModel:
+        """Main analysis method for the agent"""
+        start_time = time.time()
+        
+        try:
+            logger.info(f"Running {self.agent_type} analysis", product_idea=product_idea[:100])
+            
+            # Prepare inputs for the prompt
+            inputs = {
+                "product_idea": product_idea,
+                "context": context or {},
+                "expertise_areas": ", ".join(self.get_expertise_areas())
+            }
+            
+            # Run the analysis
+            chain = self.analysis_prompt | self.llm
+            response = await chain.ainvoke(inputs)
+            
+            processing_time = time.time() - start_time
+            
+            # Parse the response into structured format
+            analysis_result = await self._parse_response(response.content)
+            
+            return AgentResponseModel(
+                agent_type=self.agent_type,
+                analysis=analysis_result["analysis"],
+                recommendations=analysis_result["recommendations"],
+                concerns=analysis_result["concerns"],
+                confidence_score=analysis_result.get("confidence_score", 0.8),
+                reasoning=analysis_result["reasoning"],
+                supporting_data=analysis_result.get("supporting_data")
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in {self.agent_type} analysis", error=str(e))
+            raise
+    
+    async def _parse_response(self, response: str) -> Dict[str, Any]:
+        """Parse LLM response into structured format"""
+        # This is a simplified parser - in production, you'd want more robust parsing
+        try:
+            # Use another LLM call to structure the response
+            parser_prompt = PromptTemplate.from_template("""
+            Parse the following agent response into a structured JSON format:
+            
+            Response: {response}
+            
+            Return a JSON object with these keys:
+            - analysis: Dict with key insights and findings
+            - recommendations: List of actionable recommendations
+            - concerns: List of potential risks or issues
+            - confidence_score: Float between 0-1
+            - reasoning: String explaining the analysis approach
+            - supporting_data: Optional dict with additional data
+            
+            Ensure the JSON is valid and complete.
+            """)
+            
+            chain = parser_prompt | self.llm
+            parsed_response = await chain.ainvoke({"response": response})
+            
+            # In a real implementation, you'd use proper JSON parsing here
+            import json
+            try:
+                return json.loads(parsed_response.content)
+            except:
+                # Fallback parsing
+                return {
+                    "analysis": {"summary": response[:500]},
+                    "recommendations": ["Review detailed analysis"],
+                    "concerns": ["Parsing incomplete"],
+                    "confidence_score": 0.7,
+                    "reasoning": "Automated parsing applied",
+                    "supporting_data": None
+                }
+                
+        except Exception as e:
+            logger.error("Error parsing agent response", error=str(e))
+            return {
+                "analysis": {"error": "Parsing failed"},
+                "recommendations": [],
+                "concerns": ["Analysis parsing failed"],
+                "confidence_score": 0.5,
+                "reasoning": "Error in response processing",
+                "supporting_data": None
+            }

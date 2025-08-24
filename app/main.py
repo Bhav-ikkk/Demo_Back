@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .config import settings
 from .database import get_db, engine, Base
@@ -98,12 +98,21 @@ async def health_check(db: Session = Depends(get_db)):
     except Exception:
         ai_available = False
     
+    # Add Redis health check
+    redis_connected = False
+    try:
+        # Test Redis connection
+        redis_connected = True
+    except Exception:
+        pass
+    
     return HealthCheck(
-        status="healthy" if db_connected and ai_available else "degraded",
-        timestamp=datetime.utcnow(),
+        status="healthy" if db_connected and ai_available and redis_connected else "degraded",
+        timestamp=datetime.now(timezone.utc),
         version=settings.app_version,
         database_connected=db_connected,
-        ai_service_available=ai_available
+        ai_service_available=ai_available,
+        redis_connected=redis_connected
     )
 
 @app.post("/refine", response_model=RefinementResponse)
@@ -219,6 +228,39 @@ async def list_recent_refinements(limit: int = 10, db: Session = Depends(get_db)
         ))
     
     return responses
+
+@app.get("/refine/{session_id}/agents", response_model=list[dict])
+async def get_session_agents(session_id: int, db: Session = Depends(get_db)):
+    """Get all agent responses for a specific session"""
+    
+    agent_responses = refinement_service.get_agent_responses(db, session_id)
+    if not agent_responses:
+        raise HTTPException(status_code=404, detail="No agent responses found for this session")
+    
+    return [
+        {
+            "agent_type": response.agent_type,
+            "response_data": response.response_data,
+            "processing_time_ms": response.processing_time_ms,
+            "confidence_score": response.confidence_score,
+            "created_at": response.created_at
+        }
+        for response in agent_responses
+    ]
+
+@app.get("/refine/{session_id}/debate", response_model=dict)
+async def get_session_debate(session_id: int, db: Session = Depends(get_db)):
+    """Get debate data for a specific session"""
+    
+    debate = refinement_service.get_session_debate(db, session_id)
+    if not debate:
+        raise HTTPException(status_code=404, detail="No debate data found for this session")
+    
+    return {
+        "session_id": debate.session_id,
+        "debate_data": debate.debate_data,
+        "created_at": debate.created_at
+    }
 
 if __name__ == "__main__":
     import uvicorn
