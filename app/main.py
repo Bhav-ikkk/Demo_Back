@@ -4,15 +4,17 @@ from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
-from .config import settings
-from .database import get_db, engine, Base
-from .schemas import (
+from app.config import settings
+from app.database import get_db, engine, Base, check_database_connection
+from app.schemas import (
     RefineRequest, RefinementResponse, HealthCheck, 
     ProcessingStatus, RefinedProductRequirement
 )
-from .services import refinement_service
-from .middleware import LoggingMiddleware, RateLimitMiddleware
+from app.services import refinement_service, response_formatter
+from app.middleware import LoggingMiddleware, RateLimitMiddleware
 
 # Configure structured logging
 structlog.configure(
@@ -40,6 +42,11 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting AI Product Council API", version=settings.app_version)
     
+    # Check database connectivity
+    if not check_database_connection():
+        logger.error("Database connection failed during startup")
+        raise RuntimeError("Database connection failed")
+    
     # Create database tables
     Base.metadata.create_all(bind=engine)
     
@@ -52,15 +59,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="A robust API for refining product requirements using a multi-agent AI system",
+    description="A robust API for refining product requirements using a multi-agent AI system - optimized for concise responses",
     lifespan=lifespan
 )
 
 # Add middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -68,15 +75,41 @@ app.add_middleware(
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, calls=settings.rate_limit_requests, period=settings.rate_limit_window)
 
+# Global exception handlers
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    """Handle validation errors with concise error messages"""
+    logger.warning("Validation error", errors=exc.errors())
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Validation failed",
+            "details": [{"field": e["loc"][-1], "message": e["msg"]} for e in exc.errors()[:3]]  # Limit to 3 errors
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    """Handle general exceptions with concise error messages"""
+    logger.error("Unhandled exception", error=str(exc), exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "message": "An unexpected error occurred. Please try again."
+        }
+    )
+
 @app.get("/", response_model=dict)
 async def root():
     """Root endpoint with API information"""
     return {
-        "message": "AI Product Council API",
+        "message": "AI Product Council API - Optimized for Concise Responses",
         "version": settings.app_version,
         "status": "running",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "features": ["Concise AI responses", "Multi-agent analysis", "Real-time processing"]
     }
 
 @app.get("/health", response_model=HealthCheck)
@@ -85,8 +118,7 @@ async def health_check(db: Session = Depends(get_db)):
     
     # Check database connection
     try:
-        db.execute("SELECT 1")
-        db_connected = True
+        db_connected = check_database_connection()
     except Exception:
         db_connected = False
     
@@ -125,9 +157,17 @@ async def refine_product_idea(
     Refine a product idea using our multi-agent AI system.
     
     This endpoint creates a refinement session and processes it asynchronously.
+    Returns concise, focused analysis results.
     """
     
     try:
+        # Validate input length
+        if len(request.idea) > 1000:
+            raise HTTPException(
+                status_code=400, 
+                detail="Product idea too long. Please keep it under 1000 characters for optimal analysis."
+            )
+        
         # Create refinement session
         session = await refinement_service.create_refinement_session(db, request.idea)
         
@@ -143,14 +183,17 @@ async def refine_product_idea(
         return RefinementResponse(
             session_id=session.id,
             status=ProcessingStatus.PROCESSING,
-            created_at=session.created_at
+            created_at=session.created_at,
+            message="Analysis started. Results will be concise and actionable."
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to create refinement session", error=str(e))
         raise HTTPException(
             status_code=500, 
-            detail="Failed to create refinement session"
+            detail="Failed to create refinement session. Please try again."
         )
 
 @app.post("/refine/sync", response_model=RefinedProductRequirement)
@@ -161,10 +204,17 @@ async def refine_product_idea_sync(
     """
     Synchronously refine a product idea (for immediate results).
     
-    Note: This endpoint may take 30-60 seconds to complete.
+    Returns concise, focused analysis in 30-60 seconds.
     """
     
     try:
+        # Validate input length
+        if len(request.idea) > 1000:
+            raise HTTPException(
+                status_code=400, 
+                detail="Product idea too long. Please keep it under 1000 characters for optimal analysis."
+            )
+        
         # Create and process refinement session synchronously
         session = await refinement_service.create_refinement_session(db, request.idea)
         
@@ -175,8 +225,19 @@ async def refine_product_idea_sync(
             request.priority_focus or "balanced"
         )
         
+        # Format the result for consistency
+        if hasattr(result, 'agent_debate') and result.agent_debate:
+            for agent_response in result.agent_debate:
+                if hasattr(agent_response, 'analysis'):
+                    agent_response.analysis = response_formatter.format_agent_response(
+                        str(agent_response.agent_type),
+                        str(agent_response.analysis)
+                    )
+        
         return result
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to refine product idea", error=str(e))
         raise HTTPException(
@@ -188,86 +249,116 @@ async def refine_product_idea_sync(
 async def get_refinement_status(session_id: int, db: Session = Depends(get_db)):
     """Get the status and results of a refinement session"""
     
-    session = refinement_service.get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Refinement session not found")
-    
-    # Convert stored JSON back to Pydantic model if completed
-    result = None
-    if session.status == ProcessingStatus.COMPLETED and session.refined_result:
-        result = RefinedProductRequirement(**session.refined_result)
-    
-    return RefinementResponse(
-        session_id=session.id,
-        status=session.status,
-        result=result,
-        error_message=session.error_message,
-        created_at=session.created_at,
-        processing_time_seconds=session.processing_time_seconds
-    )
-
-@app.get("/refine", response_model=list[RefinementResponse])
-async def list_recent_refinements(limit: int = 10, db: Session = Depends(get_db)):
-    """List recent refinement sessions"""
-    
-    sessions = refinement_service.get_recent_sessions(db, limit)
-    
-    responses = []
-    for session in sessions:
+    try:
+        session = refinement_service.get_session(db, session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Refinement session not found")
+        
+        # Convert stored JSON back to Pydantic model if completed
         result = None
         if session.status == ProcessingStatus.COMPLETED and session.refined_result:
             result = RefinedProductRequirement(**session.refined_result)
         
-        responses.append(RefinementResponse(
+        return RefinementResponse(
             session_id=session.id,
             status=session.status,
             result=result,
             error_message=session.error_message,
             created_at=session.created_at,
             processing_time_seconds=session.processing_time_seconds
-        ))
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error retrieving session", session_id=session_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve session data")
+
+@app.get("/refine", response_model=list[RefinementResponse])
+async def list_recent_refinements(limit: int = 10, db: Session = Depends(get_db)):
+    """List recent refinement sessions"""
     
-    return responses
+    try:
+        # Validate limit
+        if limit > 50:
+            limit = 50
+        
+        sessions = refinement_service.get_recent_sessions(db, limit)
+        
+        responses = []
+        for session in sessions:
+            result = None
+            if session.status == ProcessingStatus.COMPLETED and session.refined_result:
+                result = RefinedProductRequirement(**session.refined_result)
+            
+            responses.append(RefinementResponse(
+                session_id=session.id,
+                status=session.status,
+                result=result,
+                error_message=session.error_message,
+                created_at=session.created_at,
+                processing_time_seconds=session.processing_time_seconds
+            ))
+        
+        return responses
+        
+    except Exception as e:
+        logger.error("Error listing sessions", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve sessions")
 
 @app.get("/refine/{session_id}/agents", response_model=list[dict])
 async def get_session_agents(session_id: int, db: Session = Depends(get_db)):
     """Get all agent responses for a specific session"""
     
-    agent_responses = refinement_service.get_agent_responses(db, session_id)
-    if not agent_responses:
-        raise HTTPException(status_code=404, detail="No agent responses found for this session")
-    
-    return [
-        {
-            "agent_type": response.agent_type,
-            "response_data": response.response_data,
-            "processing_time_ms": response.processing_time_ms,
-            "confidence_score": response.confidence_score,
-            "created_at": response.created_at
-        }
-        for response in agent_responses
-    ]
+    try:
+        agent_responses = refinement_service.get_agent_responses(db, session_id)
+        if not agent_responses:
+            raise HTTPException(status_code=404, detail="No agent responses found for this session")
+        
+        return [
+            {
+                "agent_type": response.agent_type,
+                "response_data": response.response_data,
+                "processing_time_ms": response.processing_time_ms,
+                "confidence_score": response.confidence_score,
+                "created_at": response.created_at
+            }
+            for response in agent_responses
+        ]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error retrieving agent responses", session_id=session_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve agent responses")
 
 @app.get("/refine/{session_id}/debate", response_model=dict)
 async def get_session_debate(session_id: int, db: Session = Depends(get_db)):
     """Get debate data for a specific session"""
     
-    debate = refinement_service.get_session_debate(db, session_id)
-    if not debate:
-        raise HTTPException(status_code=404, detail="No debate data found for this session")
-    
-    return {
-        "session_id": debate.session_id,
-        "debate_data": debate.debate_data,
-        "created_at": debate.created_at
-    }
+    try:
+        debate = refinement_service.get_session_debate(db, session_id)
+        if not debate:
+            raise HTTPException(status_code=404, detail="No debate data found for this session")
+        
+        return {
+            "session_id": debate.session_id,
+            "debate_data": debate.debate_data,
+            "created_at": debate.created_at
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error retrieving debate data", session_id=session_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve debate data")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=8000,
+        host=settings.host,
+        port=settings.port,
         reload=settings.debug,
         log_level=settings.log_level.lower()
     )

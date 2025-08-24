@@ -4,70 +4,35 @@ from .base_agent import BaseAgent
 from ..models import AgentType
 
 class CustomerResearcherAgent(BaseAgent):
-    """Customer Research specialist focusing on user needs, personas, and behavior analysis"""
+    """Customer Research specialist - optimized for concise insights"""
     
     def __init__(self):
         super().__init__(AgentType.CUSTOMER_RESEARCHER)
     
     def setup_prompts(self):
         self.analysis_prompt = PromptTemplate.from_template("""
-        ROLE: You are a Lead User Experience Researcher and Customer Insights Specialist with deep expertise in user-centered design and behavioral psychology.
+        ROLE: Customer Research Expert
         
-        EXPERTISE: {expertise_areas}
+        TASK: Analyze customer needs for this product in 2-3 sentences:
         
-        TASK: Conduct comprehensive customer research and user analysis for:
-        
-        PRODUCT IDEA: {product_idea}
+        IDEA: {product_idea}
         CONTEXT: {context}
         
-        RESEARCH FRAMEWORK:
-        1. USER PERSONA DEVELOPMENT
-           - Primary and secondary user personas
-           - Demographics, psychographics, and behavioral patterns
-           - User goals, motivations, and pain points
-           - Technology adoption patterns and preferences
+        RESPOND WITH:
+        1. Primary customer pain point (5 words max)
+        2. Target customer segment (5 words max)
+        3. Key customer need (5 words max)
+        4. One customer acquisition insight (10 words max)
         
-        2. USER JOURNEY MAPPING
-           - Current state user journey analysis
-           - Touchpoint identification and pain point mapping
-           - Opportunity areas for improvement
-           - Future state journey optimization
-        
-        3. NEEDS ASSESSMENT & VALIDATION
-           - Functional, emotional, and social needs analysis
-           - Jobs-to-be-done framework application
-           - Need prioritization and validation approach
-           - Unmet needs and opportunity gaps
-        
-        4. BEHAVIORAL ANALYSIS
-           - User behavior patterns and triggers
-           - Decision-making process and criteria
-           - Adoption barriers and enablers
-           - Usage patterns and engagement drivers
-        
-        5. RESEARCH METHODOLOGY RECOMMENDATIONS
-           - Recommended research methods and approaches
-           - Sample size and recruitment strategies
-           - Key research questions and hypotheses
-           - Success metrics and validation criteria
-        
-        Provide evidence-based insights with specific recommendations for user validation and research.
+        Be specific and actionable. No fluff.
         """)
     
     def get_expertise_areas(self) -> List[str]:
         return [
-            "User Persona Development",
-            "Customer Journey Mapping",
-            "User Needs Analysis",
-            "Behavioral Psychology",
-            "User Experience Research",
-            "Survey Design & Analysis",
-            "Interview & Focus Group Facilitation",
-            "Usability Testing",
+            "Customer Pain Points",
+            "User Research",
             "Customer Segmentation",
-            "Jobs-to-be-Done Framework",
-            "Design Thinking",
-            "Customer Validation"
+            "Acquisition Strategy"
         ]
     
     async def create_user_personas(self, product_idea: str, target_segments: List[str] = None) -> Dict[str, Any]:

@@ -4,75 +4,35 @@ from .base_agent import BaseAgent
 from ..models import AgentType
 
 class RiskAnalystAgent(BaseAgent):
-    """Risk Analysis specialist focusing on business, technical, and market risks"""
+    """Risk Analysis specialist - optimized for concise risk assessment"""
     
     def __init__(self):
         super().__init__(AgentType.RISK_ANALYST)
     
     def setup_prompts(self):
         self.analysis_prompt = PromptTemplate.from_template("""
-        ROLE: You are a Senior Risk Management Analyst with expertise in business risk assessment, regulatory compliance, and strategic risk mitigation across technology and product development.
+        ROLE: Risk Management Expert
         
-        EXPERTISE: {expertise_areas}
+        TASK: Assess risks for this product in 2-3 sentences:
         
-        TASK: Conduct comprehensive risk analysis for:
-        
-        PRODUCT IDEA: {product_idea}
+        IDEA: {product_idea}
         CONTEXT: {context}
         
-        RISK ASSESSMENT FRAMEWORK:
-        1. BUSINESS RISKS
-           - Market acceptance and adoption risks
-           - Revenue and profitability risks
-           - Competitive response risks
-           - Business model viability risks
+        RESPOND WITH:
+        1. Highest risk factor (5 words max)
+        2. Risk probability (Low/Medium/High)
+        3. Mitigation strategy (10 words max)
+        4. Risk score (1-10)
         
-        2. TECHNICAL RISKS
-           - Technology feasibility and scalability risks
-           - Security and data privacy risks
-           - Integration and compatibility risks
-           - Performance and reliability risks
-        
-        3. OPERATIONAL RISKS
-           - Resource availability and capability risks
-           - Timeline and delivery risks
-           - Quality assurance and testing risks
-           - Support and maintenance risks
-        
-        4. REGULATORY & COMPLIANCE RISKS
-           - Legal and regulatory compliance requirements
-           - Data protection and privacy regulations
-           - Industry-specific compliance needs
-           - Intellectual property risks
-        
-        5. FINANCIAL RISKS
-           - Development cost overruns
-           - Market size and revenue projections
-           - Funding and investment risks
-           - Return on investment concerns
-        
-        For each risk category, provide:
-        - Risk probability (Low/Medium/High)
-        - Impact severity (Low/Medium/High)
-        - Mitigation strategies
-        - Contingency plans
-        - Monitoring and early warning indicators
+        Be direct. Focus on actionable risks.
         """)
     
     def get_expertise_areas(self) -> List[str]:
         return [
-            "Business Risk Assessment",
-            "Technical Risk Analysis",
-            "Regulatory Compliance",
-            "Data Privacy & Security",
-            "Financial Risk Management",
-            "Operational Risk Assessment",
-            "Market Risk Analysis",
-            "Legal & IP Risk Evaluation",
-            "Risk Mitigation Planning",
-            "Crisis Management",
-            "Audit & Compliance",
-            "Insurance & Risk Transfer"
+            "Risk Assessment",
+            "Mitigation Planning",
+            "Probability Analysis",
+            "Risk Scoring"
         ]
     
     async def assess_security_risks(self, product_idea: str, data_types: List[str] = None) -> Dict[str, Any]:

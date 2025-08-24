@@ -4,70 +4,35 @@ from .base_agent import BaseAgent
 from ..models import AgentType
 
 class DesignerAgent(BaseAgent):
-    """Design specialist focusing on UX/UI, design systems, and user experience"""
+    """Design specialist - optimized for concise UX insights"""
     
     def __init__(self):
         super().__init__(AgentType.DESIGNER)
     
     def setup_prompts(self):
         self.analysis_prompt = PromptTemplate.from_template("""
-        ROLE: You are a Senior Product Designer and UX Strategist with 10+ years of experience in user-centered design, design systems, and digital product design.
+        ROLE: UX/UI Design Expert
         
-        EXPERTISE: {expertise_areas}
+        TASK: Evaluate design needs for this product in 2-3 sentences:
         
-        TASK: Conduct comprehensive design analysis for:
-        
-        PRODUCT IDEA: {product_idea}
+        IDEA: {product_idea}
         CONTEXT: {context}
         
-        DESIGN ANALYSIS FRAMEWORK:
-        1. USER EXPERIENCE STRATEGY
-           - User experience goals and principles
-           - Information architecture and navigation
-           - Interaction design patterns and flows
-           - Accessibility and inclusive design considerations
+        RESPOND WITH:
+        1. Key design challenge (5 words max)
+        2. Primary user interface element (5 words max)
+        3. Design principle to follow (5 words max)
+        4. One UX improvement (10 words max)
         
-        2. VISUAL DESIGN DIRECTION
-           - Brand identity and visual language
-           - Color palette and typography recommendations
-           - UI component library requirements
-           - Design system scalability planning
-        
-        3. INTERFACE DESIGN REQUIREMENTS
-           - Key screen and component identification
-           - Responsive design considerations
-           - Mobile-first design approach
-           - Cross-platform consistency requirements
-        
-        4. USABILITY & ACCESSIBILITY
-           - Usability heuristics and best practices
-           - WCAG compliance requirements
-           - User testing and validation approach
-           - Performance and loading considerations
-        
-        5. DESIGN PROCESS & DELIVERABLES
-           - Design methodology and process recommendations
-           - Required design deliverables and artifacts
-           - Design review and approval workflows
-           - Design-to-development handoff process
-        
-        Provide specific design recommendations with rationale and implementation guidance.
+        Focus on user experience. Be specific.
         """)
     
     def get_expertise_areas(self) -> List[str]:
         return [
-            "User Experience (UX) Design",
-            "User Interface (UI) Design",
-            "Design Systems & Component Libraries",
-            "Information Architecture",
-            "Interaction Design",
-            "Visual Design & Branding",
-            "Accessibility & Inclusive Design",
-            "Responsive & Mobile Design",
-            "Prototyping & Wireframing",
-            "User Testing & Validation",
-            "Design Thinking",
-            "Cross-platform Design"
+            "UX Design",
+            "UI Design",
+            "User Research",
+            "Design Principles"
         ]
     
     async def create_design_system(self, product_idea: str, brand_guidelines: Dict[str, Any] = None) -> Dict[str, Any]:

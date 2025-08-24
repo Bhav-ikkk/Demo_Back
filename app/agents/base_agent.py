@@ -12,20 +12,21 @@ from ..models import AgentResponseModel, AgentType
 logger = structlog.get_logger()
 
 class BaseAgent(ABC):
-    """Base class for all AI agents with common functionality"""
+    """Base class for all AI agents with common functionality - optimized for concise responses"""
     
     def __init__(self, agent_type: AgentType):
         self.agent_type = agent_type
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-1.5-flash",
-            temperature=0.7,
-            google_api_key=settings.google_api_key
+            temperature=0.3,  # Lower temperature for more focused responses
+            google_api_key=settings.google_api_key,
+            max_output_tokens=500  # Limit output length for concise responses
         )
         self.setup_prompts()
     
     @abstractmethod
     def setup_prompts(self):
-        """Setup agent-specific prompts"""
+        """Setup agent-specific prompts - keep them concise and focused"""
         pass
     
     @abstractmethod
@@ -35,7 +36,7 @@ class BaseAgent(ABC):
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def analyze(self, product_idea: str, context: Dict[str, Any] = None) -> AgentResponseModel:
-        """Main analysis method for the agent"""
+        """Main analysis method for the agent - optimized for speed and conciseness"""
         start_time = time.time()
         
         try:
@@ -72,41 +73,37 @@ class BaseAgent(ABC):
             raise
     
     async def _parse_response(self, response: str) -> Dict[str, Any]:
-        """Parse LLM response into structured format"""
-        # This is a simplified parser - in production, you'd want more robust parsing
+        """Parse LLM response into structured format - optimized for concise parsing"""
         try:
-            # Use another LLM call to structure the response
+            # Use a concise parser prompt
             parser_prompt = PromptTemplate.from_template("""
-            Parse the following agent response into a structured JSON format:
+            Parse this response into JSON format. Keep it concise:
             
-            Response: {response}
+            {response}
             
-            Return a JSON object with these keys:
-            - analysis: Dict with key insights and findings
-            - recommendations: List of actionable recommendations
-            - concerns: List of potential risks or issues
-            - confidence_score: Float between 0-1
-            - reasoning: String explaining the analysis approach
-            - supporting_data: Optional dict with additional data
-            
-            Ensure the JSON is valid and complete.
+            Return JSON with these keys (keep values brief):
+            - analysis: {"key_insight": "one sentence", "market_size": "brief estimate"}
+            - recommendations: ["action 1", "action 2"] (max 3 items)
+            - concerns: ["risk 1", "risk 2"] (max 2 items)
+            - confidence_score: 0.0-1.0
+            - reasoning: "one sentence explanation"
+            - supporting_data: null or brief data point
             """)
             
             chain = parser_prompt | self.llm
             parsed_response = await chain.ainvoke({"response": response})
             
-            # In a real implementation, you'd use proper JSON parsing here
             import json
             try:
                 return json.loads(parsed_response.content)
             except:
-                # Fallback parsing
+                # Fallback parsing for concise output
                 return {
-                    "analysis": {"summary": response[:500]},
-                    "recommendations": ["Review detailed analysis"],
-                    "concerns": ["Parsing incomplete"],
+                    "analysis": {"summary": response[:200]},
+                    "recommendations": ["Review analysis"],
+                    "concerns": ["Verify details"],
                     "confidence_score": 0.7,
-                    "reasoning": "Automated parsing applied",
+                    "reasoning": "Automated parsing",
                     "supporting_data": None
                 }
                 
@@ -115,8 +112,8 @@ class BaseAgent(ABC):
             return {
                 "analysis": {"error": "Parsing failed"},
                 "recommendations": [],
-                "concerns": ["Analysis parsing failed"],
+                "concerns": ["Analysis failed"],
                 "confidence_score": 0.5,
-                "reasoning": "Error in response processing",
+                "reasoning": "Error in processing",
                 "supporting_data": None
             }

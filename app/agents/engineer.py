@@ -4,70 +4,35 @@ from .base_agent import BaseAgent
 from ..models import AgentType
 
 class EngineerAgent(BaseAgent):
-    """Engineering specialist focusing on technical architecture, implementation, and scalability"""
+    """Engineering specialist - optimized for concise technical insights"""
     
     def __init__(self):
         super().__init__(AgentType.ENGINEER)
     
     def setup_prompts(self):
         self.analysis_prompt = PromptTemplate.from_template("""
-        ROLE: You are a Staff Software Engineer and Technical Architect with 15+ years of experience in scalable system design, full-stack development, and engineering leadership.
+        ROLE: Senior Software Engineer
         
-        EXPERTISE: {expertise_areas}
+        TASK: Assess technical feasibility in 2-3 sentences:
         
-        TASK: Conduct comprehensive technical analysis for:
-        
-        PRODUCT IDEA: {product_idea}
+        IDEA: {product_idea}
         CONTEXT: {context}
         
-        TECHNICAL ANALYSIS FRAMEWORK:
-        1. SYSTEM ARCHITECTURE DESIGN
-           - High-level system architecture and components
-           - Microservices vs monolithic architecture decision
-           - Data flow and system integration patterns
-           - Scalability and performance architecture
+        RESPOND WITH:
+        1. Technical complexity (Low/Medium/High)
+        2. Recommended tech stack (5 words max)
+        3. Key technical challenge (5 words max)
+        4. Development timeline (weeks/months)
         
-        2. TECHNOLOGY STACK RECOMMENDATIONS
-           - Frontend technology stack and frameworks
-           - Backend technology stack and databases
-           - Infrastructure and deployment platforms
-           - Third-party services and API integrations
-        
-        3. DATA ARCHITECTURE & STORAGE
-           - Database design and data modeling
-           - Data storage and retrieval patterns
-           - Data security and privacy implementation
-           - Backup and disaster recovery planning
-        
-        4. DEVELOPMENT & DEPLOYMENT
-           - Development methodology and practices
-           - CI/CD pipeline and deployment strategy
-           - Testing strategy and quality assurance
-           - Monitoring and observability implementation
-        
-        5. TECHNICAL FEASIBILITY & RISKS
-           - Technical complexity assessment
-           - Performance and scalability challenges
-           - Security and compliance considerations
-           - Development timeline and resource estimates
-        
-        Provide specific technical recommendations with implementation details and effort estimates.
+        Focus on implementation. Be realistic.
         """)
     
     def get_expertise_areas(self) -> List[str]:
         return [
-            "System Architecture & Design",
-            "Full-Stack Development",
-            "Database Design & Optimization",
-            "Cloud Infrastructure & DevOps",
-            "API Design & Integration",
-            "Security & Authentication",
-            "Performance Optimization",
-            "Scalability Planning",
-            "Testing & Quality Assurance",
-            "CI/CD & Deployment",
-            "Monitoring & Observability",
-            "Technical Leadership"
+            "Technical Architecture",
+            "System Design",
+            "Development Planning",
+            "Technology Selection"
         ]
     
     async def design_system_architecture(self, product_idea: str, scale_requirements: Dict[str, Any] = None) -> Dict[str, Any]:
