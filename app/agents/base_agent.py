@@ -34,39 +34,64 @@ class BaseAgent(ABC):
         """Return list of expertise areas for this agent"""
         pass
     
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def analyze(self, product_idea: str, context: Dict[str, Any] = None) -> AgentResponseModel:
-        """Main analysis method for the agent - optimized for speed and conciseness"""
+        """Main analysis method with automatic fallback when primary API fails"""
         start_time = time.time()
         
         try:
             logger.info(f"Running {self.agent_type} analysis", product_idea=product_idea[:100])
             
-            # Prepare inputs for the prompt
-            inputs = {
-                "product_idea": product_idea,
-                "context": context or {},
-                "expertise_areas": ", ".join(self.get_expertise_areas())
-            }
+            # Use fallback orchestrator for automatic fallback
+            from ..fallback_orchestrator import fallback_orchestrator
             
-            # Run the analysis
-            chain = self.analysis_prompt | self.llm
-            response = await chain.ainvoke(inputs)
+            async def primary_analysis():
+                """Primary analysis using Gemini API"""
+                # Prepare inputs for the prompt
+                inputs = {
+                    "product_idea": product_idea,
+                    "context": context or {},
+                    "expertise_areas": ", ".join(self.get_expertise_areas())
+                }
+                
+                # Run the analysis with retry
+                from tenacity import retry, stop_after_attempt, wait_exponential
+                
+                @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+                async def retry_analysis():
+                    chain = self.analysis_prompt | self.llm
+                    response = await chain.ainvoke(inputs)
+                    return response
+                
+                response = await retry_analysis()
+                
+                # Parse the response into structured format
+                analysis_result = await self._parse_response(response.content)
+                
+                return AgentResponseModel(
+                    agent_type=self.agent_type,
+                    analysis=analysis_result["analysis"],
+                    recommendations=analysis_result["recommendations"],
+                    concerns=analysis_result["concerns"],
+                    confidence_score=analysis_result.get("confidence_score", 0.8),
+                    reasoning=analysis_result["reasoning"],
+                    supporting_data=analysis_result.get("supporting_data")
+                )
+            
+            # Execute with fallback
+            response, used_fallback = await fallback_orchestrator.execute_with_fallback(
+                primary_analysis, 
+                str(self.agent_type), 
+                product_idea, 
+                context
+            )
             
             processing_time = time.time() - start_time
             
-            # Parse the response into structured format
-            analysis_result = await self._parse_response(response.content)
+            if used_fallback:
+                logger.info(f"Used fallback for {self.agent_type}", 
+                           fallback_method=response.reasoning.split(']')[0] if ']' in response.reasoning else 'unknown')
             
-            return AgentResponseModel(
-                agent_type=self.agent_type,
-                analysis=analysis_result["analysis"],
-                recommendations=analysis_result["recommendations"],
-                concerns=analysis_result["concerns"],
-                confidence_score=analysis_result.get("confidence_score", 0.8),
-                reasoning=analysis_result["reasoning"],
-                supporting_data=analysis_result.get("supporting_data")
-            )
+            return response
             
         except Exception as e:
             logger.error(f"Error in {self.agent_type} analysis", error=str(e))

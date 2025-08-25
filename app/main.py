@@ -114,7 +114,7 @@ async def root():
 
 @app.get("/health", response_model=HealthCheck)
 async def health_check(db: Session = Depends(get_db)):
-    """Comprehensive health check endpoint"""
+    """Comprehensive health check endpoint with fallback system status"""
     
     # Check database connection
     try:
@@ -138,13 +138,30 @@ async def health_check(db: Session = Depends(get_db)):
     except Exception:
         pass
     
+    # Check fallback system status
+    fallback_status = {"healthy": True, "state": "primary"}
+    try:
+        from .fallback_orchestrator import fallback_orchestrator
+        fallback_status = fallback_orchestrator.get_health_status()
+    except Exception as e:
+        logger.warning("Failed to get fallback status", error=str(e))
+        fallback_status = {"healthy": False, "error": str(e)}
+    
+    # Determine overall status
+    overall_status = "healthy"
+    if not db_connected or not ai_available or not redis_connected:
+        overall_status = "degraded"
+    if not fallback_status.get("healthy", True):
+        overall_status = "degraded"
+    
     return HealthCheck(
-        status="healthy" if db_connected and ai_available and redis_connected else "degraded",
+        status=overall_status,
         timestamp=datetime.now(timezone.utc),
         version=settings.app_version,
         database_connected=db_connected,
         ai_service_available=ai_available,
-        redis_connected=redis_connected
+        redis_connected=redis_connected,
+        fallback_status=fallback_status
     )
 
 @app.post("/refine", response_model=RefinementResponse)
@@ -352,6 +369,55 @@ async def get_session_debate(session_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error("Error retrieving debate data", session_id=session_id, error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve debate data")
+
+# Fallback System Management Endpoints
+@app.get("/fallback/status")
+async def get_fallback_status():
+    """Get current fallback system status and statistics"""
+    try:
+        from .fallback_orchestrator import fallback_orchestrator
+        return fallback_orchestrator.get_fallback_stats()
+    except Exception as e:
+        logger.error("Failed to get fallback status", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve fallback status")
+
+@app.get("/fallback/health")
+async def get_fallback_health():
+    """Get detailed fallback system health information"""
+    try:
+        from .fallback_orchestrator import fallback_orchestrator
+        return fallback_orchestrator.get_health_status()
+    except Exception as e:
+        logger.error("Failed to get fallback health", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve fallback health")
+
+@app.post("/fallback/reset")
+async def reset_fallback_system():
+    """Reset fallback system to primary mode"""
+    try:
+        from .fallback_orchestrator import fallback_orchestrator
+        fallback_orchestrator.reset_to_primary()
+        return {"message": "Fallback system reset to primary mode", "status": "success"}
+    except Exception as e:
+        logger.error("Failed to reset fallback system", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to reset fallback system")
+
+@app.get("/fallback/methods")
+async def get_available_fallback_methods():
+    """Get list of available fallback methods and their status"""
+    try:
+        from .fallback_orchestrator import fallback_orchestrator
+        methods = {}
+        for name, method in fallback_orchestrator.fallback_methods.items():
+            methods[str(name)] = {
+                "available": method.is_available(),
+                "confidence_score": method.get_confidence_score(),
+                "class_name": method.__class__.__name__
+            }
+        return methods
+    except Exception as e:
+        logger.error("Failed to get fallback methods", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve fallback methods")
 
 if __name__ == "__main__":
     import uvicorn
