@@ -1,7 +1,7 @@
 import asyncio
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from ..database import get_db, RefinementSession, AgentResponse, AgentDebate, CriticAnalysis
+from ..database import get_db, RefinementSession, AgentResponse, AgentDebate
 from ..models import SessionStatus, ProductAnalysisRequest, ProductAnalysisResponse
 from .critic_orchestrator import critic_orchestrator
 import structlog
