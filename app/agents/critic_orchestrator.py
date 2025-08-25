@@ -6,7 +6,8 @@ from langchain.prompts import PromptTemplate
 from tenacity import retry, stop_after_attempt, wait_exponential
 import structlog
 from ..config import settings
-from ..models import AgentType, AgentResponseModel, DebateArgumentModel, CriticAnalysisModel
+# CORRECTED LINE
+from ..models import AgentType, AgentResponseModel, CriticAnalysisModel
 from .market_researcher import MarketResearcherAgent
 from .customer_researcher import CustomerResearcherAgent
 from .product_manager import ProductManagerAgent
